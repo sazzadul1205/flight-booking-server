@@ -21,8 +21,6 @@ const searchFlights = async (req, res) => {
       ChildrenAges = [],
     } = req.body;
 
-    // console.log("Request body:", req.body);
-
     // Validate required fields
     if (
       !JourneyType ||
@@ -41,7 +39,7 @@ const searchFlights = async (req, res) => {
     // Get user_id from authenticated user
     const userId = req.user.id;
 
-    // Prepare request data with correct field names for the external API
+    // ✅ FIXED: Correct field names (NoofAdult, not NoOfAdult)
     const requestData = {
       JourneyType: parseInt(JourneyType),
       Origin: Origin.toUpperCase().trim(),
@@ -49,13 +47,13 @@ const searchFlights = async (req, res) => {
       DepartureDate: DepartureDate,
       ReturnDate: ReturnDate || "",
       ClassType: ClassType || "Economy",
-      NoOfAdult: parseInt(NoofAdult), 
-      NoOfChildren: parseInt(NoofChildren || 0),
-      NoOfInfant: parseInt(NoofInfant || 0),
-      IsSpecialTexRedumtion: IsSpecialTexRedumption, 
+      NoofAdult: parseInt(NoofAdult), // ✅ Fixed
+      NoofChildren: parseInt(NoofChildren || 0), // ✅ Fixed
+      NoofInfant: parseInt(NoofInfant || 0), // ✅ Fixed
+      IsSpecialTexRedumption: IsSpecialTexRedumption,
       IsFlexSearch: IsFlexSearch,
-      Flex: Flex === null || Flex === undefined ? null : Flex, 
-      ChildrenAges: Array.isArray(ChildrenAges) ? ChildrenAges : [], 
+      Flex: Flex === null || Flex === undefined ? null : Flex,
+      ChildrenAges: Array.isArray(ChildrenAges) ? ChildrenAges : [],
     };
 
     console.log(
@@ -63,7 +61,7 @@ const searchFlights = async (req, res) => {
       JSON.stringify(requestData, null, 2),
     );
 
-    // Call external flight API with timeout
+    // Call external flight API
     const response = await axios.post(
       "https://uthaotrip.com/api/air/UnauthorizeSearchAir",
       requestData,
@@ -76,27 +74,21 @@ const searchFlights = async (req, res) => {
       },
     );
 
-    console.log("External API response:", response.data);
-
     // Check if API call was successful
     if (!response.data || !response.data.Success) {
-      // If the API returns false but has a message, return it
       if (response.data && response.data.Message) {
         return res.status(400).json({
           success: false,
           message: response.data.Message,
         });
       }
-
-      // If no specific message, provide a generic one
       return res.status(400).json({
         success: false,
         message: "Flight search failed. Please check your search criteria.",
-        apiResponse: response.data, 
+        apiResponse: response.data,
       });
     }
 
-    // Check if payload exists and is an array
     const payload = response.data.Payload || [];
     if (!Array.isArray(payload)) {
       return res.status(400).json({
@@ -105,7 +97,6 @@ const searchFlights = async (req, res) => {
       });
     }
 
-    // If no flights found
     if (payload.length === 0) {
       return res.json({
         success: true,
@@ -118,37 +109,41 @@ const searchFlights = async (req, res) => {
     // Get active markup/commission rules for this user
     const rules = await MarkupCommissionRule.getActiveRules(userId);
 
-    // Apply markup and commission to each flight
+    // ✅ FIXED: Apply markup and commission with correct calculation
     const flights = payload.map((flight) => {
-      // Safely extract flight values with fallbacks
+      // Safely extract flight values
       const baseFare = flight.BasePrice || flight.BaseFare || 0;
       const totalTax = flight.TotalTax || flight.Tax || 0;
       const totalPrice = flight.TotalPrice || flight.TotalFare || 0;
       const airlineCode = flight.PlatingCarrier || flight.Carrier || "";
 
-      // Find markup/commission rule
+      // Find matching rule with priority order:
+      // 1. User-specific + airline-specific
+      // 2. User-specific + global (all airlines)
+      // 3. Global + airline-specific
+      // 4. Global + global (fallback)
       let rule = null;
 
-      // Try user-specific airline rule
+      // Priority 1: User-specific airline rule
       rule = rules.find(
         (r) => r.user_id === userId && r.airline_code === airlineCode,
       );
 
-      // Try user-specific global rule
+      // Priority 2: User-specific global rule
       if (!rule) {
         rule = rules.find(
           (r) => r.user_id === userId && r.airline_code === null,
         );
       }
 
-      // Try global airline-specific rule
+      // Priority 3: Global airline-specific rule
       if (!rule) {
         rule = rules.find(
           (r) => r.user_id === null && r.airline_code === airlineCode,
         );
       }
 
-      // Try global rule (fallback)
+      // Priority 4: Global rule (fallback)
       if (!rule) {
         rule = rules.find((r) => r.user_id === null && r.airline_code === null);
       }
@@ -166,18 +161,19 @@ const searchFlights = async (req, res) => {
         };
       }
 
-      // Calculate NewBaseFare: BaseFare + TotalTax + Markup
-      let newBaseFare = baseFare + totalTax;
+      const baseForMarkup = baseFare + totalTax;
+      let markupAmount = 0;
 
-      // Apply markup
       if (rule.markup_type === "percentage") {
-        newBaseFare = newBaseFare + (newBaseFare * rule.markup_value) / 100;
+        markupAmount = (baseForMarkup * rule.markup_value) / 100;
       } else if (rule.markup_type === "fixed" || rule.markup_type === "flat") {
-        newBaseFare = newBaseFare + rule.markup_value;
+        markupAmount = rule.markup_value;
       }
 
-      // Calculate commission on BaseFare only (not including tax)
+      const newBaseFare = baseForMarkup + markupAmount;
+
       let commission = 0;
+
       if (rule.commission_type === "percentage") {
         commission = (baseFare * rule.commission_value) / 100;
       } else if (
@@ -187,13 +183,10 @@ const searchFlights = async (req, res) => {
         commission = rule.commission_value;
       }
 
-      // NewDiscount = Commission
       const newDiscount = commission;
 
-      // NewTotalFare = NewBaseFare + Tax - Commission
       const newTotalFare = newBaseFare - newDiscount;
 
-      // Return flight with new pricing
       return {
         ...flight,
         OriginalBaseFare: Math.round(baseFare),
@@ -201,6 +194,20 @@ const searchFlights = async (req, res) => {
         NewBaseFare: Math.round(newBaseFare),
         NewDiscount: Math.round(newDiscount),
         NewTotalFare: Math.round(newTotalFare),
+        CalculationBreakdown: {
+          baseFare: Math.round(baseFare),
+          totalTax: Math.round(totalTax),
+          baseForMarkup: Math.round(baseForMarkup),
+          markupType: rule.markup_type,
+          markupValue: rule.markup_value,
+          markupAmount: Math.round(markupAmount),
+          newBaseFare: Math.round(newBaseFare),
+          commissionType: rule.commission_type,
+          commissionValue: rule.commission_value,
+          commissionAmount: Math.round(commission),
+          newDiscount: Math.round(newDiscount),
+          newTotalFare: Math.round(newTotalFare),
+        },
         AppliedRule: {
           id: rule.id,
           user_id: rule.user_id,
@@ -214,7 +221,7 @@ const searchFlights = async (req, res) => {
       };
     });
 
-    // Return success response with flights
+    // Return success response
     res.json({
       success: true,
       data: flights,
@@ -234,7 +241,6 @@ const searchFlights = async (req, res) => {
     }
 
     if (error.request) {
-      // The request was made but no response was received
       return res.status(503).json({
         success: false,
         message:
@@ -243,7 +249,6 @@ const searchFlights = async (req, res) => {
       });
     }
 
-    // Something happened in setting up the request that triggered an Error
     res.status(500).json({
       success: false,
       message: "Server error occurred during flight search",
