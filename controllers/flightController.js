@@ -1,7 +1,8 @@
+// controllers/flightController.js
 const axios = require("axios");
 const MarkupCommissionRule = require("../models/MarkupCommissionRule");
 
-// Search flights with markup & commission applied
+// Search flights with markup & commission applied (user-specific)
 const searchFlights = async (req, res) => {
   try {
     const {
@@ -14,11 +15,14 @@ const searchFlights = async (req, res) => {
       NoofAdult,
       NoofChildren,
       NoofInfant,
-      IsSpecialTexRedumption,
-      IsFlexSearch,
-      Flex,
-      ChildrenAges,
+      IsSpecialTexRedumption = false,
+      IsFlexSearch = false,
+      Flex = 0,
+      ChildrenAges = "",
     } = req.body;
+
+    // Get user_id from authenticated user
+    const userId = req.user.id;
 
     // Call external flight API
     const response = await axios.post(
@@ -28,11 +32,11 @@ const searchFlights = async (req, res) => {
         Origin,
         Destination,
         DepartureDate,
-        ReturnDate,
+        ReturnDate: ReturnDate || "",
         ClassType,
         NoofAdult,
-        NoofChildren,
-        NoofInfant,
+        NoofChildren: NoofChildren || 0,
+        NoofInfant: NoofInfant || 0,
         IsSpecialTexRedumption,
         IsFlexSearch,
         Flex,
@@ -46,23 +50,56 @@ const searchFlights = async (req, res) => {
     if (!response.data.Success) {
       return res.status(400).json({
         success: false,
-        message: response.data.Message,
+        message: response.data.Message || "Flight search failed",
       });
     }
 
-    // Get active markup/commission rules
-    const rules = await MarkupCommissionRule.getActiveRules();
+    // Get active markup/commission rules for this user
+    const rules = await MarkupCommissionRule.getActiveRules(userId);
 
     // Apply markup and commission to each flight
     const flights = response.data.Payload.map((flight) => {
-      // Find applicable rule (specific airline or global)
-      const rule =
-        rules.find(
-          (r) =>
-            r.airline_code === flight.PlatingCarrier || r.airline_code === null,
-        ) || rules.find((r) => r.airline_code === null);
+      // Find applicable rule with priority:
+      // 1. User-specific airline rule
+      // 2. User-specific global rule
+      // 3. Global airline-specific rule
+      // 4. Global rule
+      let rule = null;
 
-      if (!rule) return flight;
+      // Try user-specific airline rule
+      rule = rules.find(
+        (r) => r.user_id === userId && r.airline_code === flight.PlatingCarrier,
+      );
+
+      // Try user-specific global rule
+      if (!rule) {
+        rule = rules.find(
+          (r) => r.user_id === userId && r.airline_code === null,
+        );
+      }
+
+      // Try global airline-specific rule
+      if (!rule) {
+        rule = rules.find(
+          (r) => r.user_id === null && r.airline_code === flight.PlatingCarrier,
+        );
+      }
+
+      // Try global rule
+      if (!rule) {
+        rule = rules.find((r) => r.user_id === null && r.airline_code === null);
+      }
+
+      // If no rule found, return flight without modifications
+      if (!rule) {
+        return {
+          ...flight,
+          NewBaseFare: flight.BasePrice || 0,
+          NewDiscount: 0,
+          NewTotalFare: flight.TotalPrice || 0,
+          AppliedRule: null,
+        };
+      }
 
       // Calculate NewBaseFare: BaseFare + TotalTax + Markup
       const baseFare = flight.BasePrice || 0;
@@ -93,6 +130,7 @@ const searchFlights = async (req, res) => {
         NewDiscount: Math.round(newDiscount),
         NewTotalFare: Math.round(newBaseFare + totalTax - newDiscount),
         AppliedRule: {
+          user_id: rule.user_id,
           airline_code: rule.airline_code,
           markup_type: rule.markup_type,
           markup_value: rule.markup_value,
@@ -105,9 +143,9 @@ const searchFlights = async (req, res) => {
     res.json({
       success: true,
       data: flights,
-      original_response: response.data,
     });
   } catch (error) {
+    console.error("Flight search error:", error);
     res.status(500).json({
       success: false,
       message: "Server error",
