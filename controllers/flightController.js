@@ -56,10 +56,10 @@ const searchFlights = async (req, res) => {
       ChildrenAges: Array.isArray(ChildrenAges) ? ChildrenAges : [],
     };
 
-    console.log(
-      "Sending to external API:",
-      JSON.stringify(requestData, null, 2),
-    );
+    // console.log(
+    //   "Sending to external API:",
+    //   JSON.stringify(requestData, null, 2),
+    // );
 
     // Call external flight API
     const response = await axios.post(
