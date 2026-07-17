@@ -2,14 +2,14 @@
 
 /**
  * Filter flights based on user criteria
- * Complete implementation matching PDF requirements
+ * Fully fixed to match the actual flight data structure
  */
+
 const filterFlights = async (req, res) => {
   try {
     const flights = req.body.flights || [];
     const filter = req.body.filter || {};
 
-    // If no flights or filter, return empty
     if (!flights.length) {
       return res.json({
         success: true,
@@ -20,7 +20,6 @@ const filterFlights = async (req, res) => {
       });
     }
 
-    // If no filter criteria, return all flights
     if (!Object.keys(filter).length) {
       return res.json({
         success: true,
@@ -34,13 +33,12 @@ const filterFlights = async (req, res) => {
     let filtered = [...flights];
 
     // ============================================================
-    // 1. PRICE FILTERS
+    // 1. PRICE FILTER
     // ============================================================
-
-    // Filter by price range (using NewTotalFare after markup/commission)
     if (filter.min_price || filter.max_price) {
       filtered = filtered.filter((flight) => {
-        const price = flight.NewTotalFare || flight.TotalPrice || 0;
+        const price =
+          flight.NewTotalFare || flight.TotalPrice || flight.TotalFare || 0;
         if (filter.min_price && price < filter.min_price) return false;
         if (filter.max_price && price > filter.max_price) return false;
         return true;
@@ -48,58 +46,68 @@ const filterFlights = async (req, res) => {
     }
 
     // ============================================================
-    // 2. AIRLINE FILTERS
+    // 2. AIRLINE FILTERS – FIXED FIELD NAMES
     // ============================================================
 
-    // Filter by airlines (by name)
+    // Filter by airline name
     if (filter.airlines && filter.airlines.length) {
       filtered = filtered.filter((flight) => {
-        const airlineName = flight.AirlineName || flight.CarrierName || "";
-        return filter.airlines.some((name) =>
-          airlineName.toLowerCase().includes(name.toLowerCase()),
+        // Try root-level names, then first onward segment
+        const name =
+          flight.PlatingCarrierName ||
+          flight.CarrierName ||
+          flight.Onwards?.[0]?.CarrierName ||
+          flight.Onwards?.[0]?.OperatingCarrierName ||
+          "";
+        return filter.airlines.some((airline) =>
+          name.toLowerCase().includes(airline.toLowerCase()),
         );
       });
     }
 
-    // Filter by airline code (IATA code)
+    // Filter by airline code (IATA)
     if (filter.airline_code && filter.airline_code.length) {
       filtered = filtered.filter((flight) => {
-        const airlineCode = flight.PlatingCarrier || flight.Carrier || "";
-        return filter.airline_code.includes(airlineCode);
+        const code =
+          flight.PlatingCarrier ||
+          flight.Carrier ||
+          flight.Onwards?.[0]?.Carrier ||
+          flight.Onwards?.[0]?.OperatingCarrier ||
+          "";
+        return filter.airline_code.some(
+          (filterCode) => code.toUpperCase() === filterCode.toUpperCase(),
+        );
       });
     }
 
     // ============================================================
-    // 3. FARE TYPE FILTERS
+    // 3. FARE TYPE FILTER
     // ============================================================
-
-    // Filter by fare type (Refundable/Non-Refundable)
     if (filter.fare_type && filter.fare_type.length) {
       filtered = filtered.filter((flight) => {
-        const isRefundable = flight.IsRefundable || flight.Refundable || false;
+        const isRefundable = flight.IsRefundable === true;
         const type = isRefundable ? "Refundable" : "Non-Refundable";
         return filter.fare_type.includes(type);
       });
     }
 
     // ============================================================
-    // 4. AIRCRAFT & BAGGAGE FILTERS
+    // 4. AIRCRAFT & BAGGAGE – FIXED FIELD NAMES
     // ============================================================
-
-    // Filter by aircraft type
     if (filter.aircraft && filter.aircraft.length) {
       filtered = filtered.filter((flight) => {
-        const aircraft = flight.Aircraft || flight.Equipment || "";
+        const aircraft =
+          flight.Onwards?.[0]?.Equipment || flight.Equipment || "";
         return filter.aircraft.some((type) =>
           aircraft.toLowerCase().includes(type.toLowerCase()),
         );
       });
     }
 
-    // Filter by baggage allowance
     if (filter.baggage && filter.baggage.length) {
       filtered = filtered.filter((flight) => {
-        const baggage = flight.Baggage || flight.Allowance || "";
+        const baggage =
+          flight.Onwards?.[0]?.AirBaggageAllowance || flight.Baggage || "";
         return filter.baggage.some((b) =>
           baggage.toLowerCase().includes(b.toLowerCase()),
         );
@@ -110,25 +118,22 @@ const filterFlights = async (req, res) => {
     // 5. ONWARD FLIGHT FILTERS (Departure)
     // ============================================================
 
-    // Filter by onward flight stops
+    // Stops
     if (filter.onward_flight_stops && filter.onward_flight_stops.length) {
       filtered = filtered.filter((flight) => {
-        const stops =
-          flight.Onwards?.[0]?.NoOfStop ||
-          flight.TotalTravelTimes?.[0]?.NoOfStop ||
-          0;
+        const stops = flight.TotalTravelTimes?.[0]?.NoOfStop ?? 0;
         return filter.onward_flight_stops.includes(stops);
       });
     }
 
-    // Filter by onward departure time
+    // Departure time
     if (filter.onward_depart_time && filter.onward_depart_time.length) {
       filtered = filtered.filter((flight) => {
         const depTime = flight.Onwards?.[0]?.DepartureTime;
         if (!depTime) return true;
         const hour = new Date(depTime).getHours();
-        return filter.onward_depart_time.some((timeRange) => {
-          const [start, end] = timeRange.name
+        return filter.onward_depart_time.some((range) => {
+          const [start, end] = range.name
             .split(" To ")
             .map((t) => parseInt(t.split(":")[0]));
           return hour >= start && hour <= end;
@@ -136,14 +141,14 @@ const filterFlights = async (req, res) => {
       });
     }
 
-    // Filter by onward arrival time
+    // Arrival time
     if (filter.onward_arrival_time && filter.onward_arrival_time.length) {
       filtered = filtered.filter((flight) => {
         const arrTime = flight.Onwards?.[0]?.ArrivalTime;
         if (!arrTime) return true;
         const hour = new Date(arrTime).getHours();
-        return filter.onward_arrival_time.some((timeRange) => {
-          const [start, end] = timeRange.name
+        return filter.onward_arrival_time.some((range) => {
+          const [start, end] = range.name
             .split(" To ")
             .map((t) => parseInt(t.split(":")[0]));
           return hour >= start && hour <= end;
@@ -151,104 +156,96 @@ const filterFlights = async (req, res) => {
       });
     }
 
-    // Filter by onward flying time (duration)
+    // Flying time (duration in minutes)
     if (filter.onward_flying_time && filter.onward_flying_time.length) {
       filtered = filtered.filter((flight) => {
-        const travelTime =
-          flight.Onwards?.[0]?.TravelTime ||
-          flight.TotalTravelTimes?.[0]?.TravelTime ||
-          0;
-        const hours = travelTime / 60; // Convert minutes to hours
-
-        return filter.onward_flying_time.some((timeRange) => {
-          const [min, max] = parseTimeRange(timeRange.name);
-          return hours >= min && (max === null || hours <= max);
+        const durationStr = flight.Onwards?.[0]?.TravelDuration || "";
+        const minutes = parseDurationToMinutes(durationStr);
+        return filter.onward_flying_time.some((range) => {
+          const [min, max] = parseHourRange(range.name);
+          return minutes >= min && (max === null || minutes <= max);
         });
       });
     }
 
-    // Filter by onward transit hour (layover duration)
+    // Transit (layover) time in minutes
     if (filter.onward_transit_hour && filter.onward_transit_hour.length) {
       filtered = filtered.filter((flight) => {
         const segments = flight.Onwards || [];
-        if (segments.length < 2) return true; // No layover
+        if (segments.length < 2) return true; // no layover
 
-        // Calculate total layover time
-        let totalLayover = 0;
+        let totalLayoverMs = 0;
         for (let i = 0; i < segments.length - 1; i++) {
           const arrival = new Date(segments[i].ArrivalTime);
           const departure = new Date(segments[i + 1].DepartureTime);
-          const layover = (departure - arrival) / (1000 * 60 * 60); // Hours
-          totalLayover += layover;
+          totalLayoverMs += departure - arrival;
         }
+        const totalLayoverMinutes = totalLayoverMs / (1000 * 60);
 
-        return filter.onward_transit_hour.some((timeRange) => {
-          const [min, max] = parseTimeRange(timeRange.name);
-          return totalLayover >= min && (max === null || totalLayover <= max);
+        return filter.onward_transit_hour.some((range) => {
+          const [min, max] = parseHourRange(range.name);
+          return (
+            totalLayoverMinutes >= min &&
+            (max === null || totalLayoverMinutes <= max)
+          );
         });
       });
     }
 
-    // Filter by onward layover airport
+    // Layover airports
     if (filter.onward_layover_airport && filter.onward_layover_airport.length) {
       filtered = filtered.filter((flight) => {
         const segments = flight.Onwards || [];
         if (segments.length < 2) return true;
 
-        // Get layover airports (all intermediate airports)
+        // Get all intermediate airports (Destinations of all but last)
         const layoverAirports = segments
-          .slice(1, -1)
-          .map((seg) => seg.Destination || seg.ArrivalAirport || "");
-
+          .slice(0, -1)
+          .map((seg) => seg.Destination || "");
         return filter.onward_layover_airport.some((airport) =>
-          layoverAirports.some((a) =>
-            a.toLowerCase().includes(airport.toLowerCase()),
+          layoverAirports.some((dest) =>
+            dest.toUpperCase().includes(airport.toUpperCase()),
           ),
         );
       });
     }
 
-    // Filter by onward destination airport
+    // Destination airport (final)
     if (
       filter.onward_destination_airport &&
       filter.onward_destination_airport.length
     ) {
       filtered = filtered.filter((flight) => {
         const lastSegment = flight.Onwards?.[flight.Onwards.length - 1];
-        const destination =
-          lastSegment?.Destination || lastSegment?.ArrivalAirport || "";
+        const dest = lastSegment?.Destination || flight.Destination || "";
         return filter.onward_destination_airport.some((airport) =>
-          destination.toLowerCase().includes(airport.toLowerCase()),
+          dest.toUpperCase().includes(airport.toUpperCase()),
         );
       });
     }
 
     // ============================================================
-    // 6. RETURN FLIGHT FILTERS (Return)
+    // 6. RETURN FLIGHT FILTERS (if applicable)
     // ============================================================
+    const hasReturn = filtered.some((f) => f.Returns && f.Returns.length > 0);
 
-    // Only apply return filters if return flights exist
-    const hasReturnFlights = filtered.some(
-      (f) => f.Returns && f.Returns.length > 0,
-    );
-
-    if (hasReturnFlights) {
-      // Filter by return flight stops
+    if (hasReturn) {
+      // Return stops
       if (filter.return_flight_stops && filter.return_flight_stops.length) {
         filtered = filtered.filter((flight) => {
-          const stops = flight.Returns?.[0]?.NoOfStop || 0;
+          const stops = flight.TotalTravelTimes?.[1]?.NoOfStop ?? 0;
           return filter.return_flight_stops.includes(stops);
         });
       }
 
-      // Filter by return departure time
+      // Return departure time
       if (filter.return_depart_time && filter.return_depart_time.length) {
         filtered = filtered.filter((flight) => {
           const depTime = flight.Returns?.[0]?.DepartureTime;
           if (!depTime) return true;
           const hour = new Date(depTime).getHours();
-          return filter.return_depart_time.some((timeRange) => {
-            const [start, end] = timeRange.name
+          return filter.return_depart_time.some((range) => {
+            const [start, end] = range.name
               .split(" To ")
               .map((t) => parseInt(t.split(":")[0]));
             return hour >= start && hour <= end;
@@ -256,14 +253,14 @@ const filterFlights = async (req, res) => {
         });
       }
 
-      // Filter by return arrival time
+      // Return arrival time
       if (filter.return_arrival_time && filter.return_arrival_time.length) {
         filtered = filtered.filter((flight) => {
           const arrTime = flight.Returns?.[0]?.ArrivalTime;
           if (!arrTime) return true;
           const hour = new Date(arrTime).getHours();
-          return filter.return_arrival_time.some((timeRange) => {
-            const [start, end] = timeRange.name
+          return filter.return_arrival_time.some((range) => {
+            const [start, end] = range.name
               .split(" To ")
               .map((t) => parseInt(t.split(":")[0]));
             return hour >= start && hour <= end;
@@ -271,40 +268,43 @@ const filterFlights = async (req, res) => {
         });
       }
 
-      // Filter by return flying time
+      // Return flying time
       if (filter.return_flying_time && filter.return_flying_time.length) {
         filtered = filtered.filter((flight) => {
-          const travelTime = flight.Returns?.[0]?.TravelTime || 0;
-          const hours = travelTime / 60;
-          return filter.return_flying_time.some((timeRange) => {
-            const [min, max] = parseTimeRange(timeRange.name);
-            return hours >= min && (max === null || hours <= max);
+          const durationStr = flight.Returns?.[0]?.TravelDuration || "";
+          const minutes = parseDurationToMinutes(durationStr);
+          return filter.return_flying_time.some((range) => {
+            const [min, max] = parseHourRange(range.name);
+            return minutes >= min && (max === null || minutes <= max);
           });
         });
       }
 
-      // Filter by return transit hour
+      // Return transit (layover)
       if (filter.return_transit_hour && filter.return_transit_hour.length) {
         filtered = filtered.filter((flight) => {
           const segments = flight.Returns || [];
           if (segments.length < 2) return true;
 
-          let totalLayover = 0;
+          let totalLayoverMs = 0;
           for (let i = 0; i < segments.length - 1; i++) {
             const arrival = new Date(segments[i].ArrivalTime);
             const departure = new Date(segments[i + 1].DepartureTime);
-            const layover = (departure - arrival) / (1000 * 60 * 60);
-            totalLayover += layover;
+            totalLayoverMs += departure - arrival;
           }
+          const totalLayoverMinutes = totalLayoverMs / (1000 * 60);
 
-          return filter.return_transit_hour.some((timeRange) => {
-            const [min, max] = parseTimeRange(timeRange.name);
-            return totalLayover >= min && (max === null || totalLayover <= max);
+          return filter.return_transit_hour.some((range) => {
+            const [min, max] = parseHourRange(range.name);
+            return (
+              totalLayoverMinutes >= min &&
+              (max === null || totalLayoverMinutes <= max)
+            );
           });
         });
       }
 
-      // Filter by return layover airport
+      // Return layover airports
       if (
         filter.return_layover_airport &&
         filter.return_layover_airport.length
@@ -312,37 +312,34 @@ const filterFlights = async (req, res) => {
         filtered = filtered.filter((flight) => {
           const segments = flight.Returns || [];
           if (segments.length < 2) return true;
-
           const layoverAirports = segments
-            .slice(1, -1)
-            .map((seg) => seg.Destination || seg.ArrivalAirport || "");
-
+            .slice(0, -1)
+            .map((seg) => seg.Destination || "");
           return filter.return_layover_airport.some((airport) =>
-            layoverAirports.some((a) =>
-              a.toLowerCase().includes(airport.toLowerCase()),
+            layoverAirports.some((dest) =>
+              dest.toUpperCase().includes(airport.toUpperCase()),
             ),
           );
         });
       }
 
-      // Filter by return destination airport
+      // Return destination airport
       if (
         filter.return_destination_airport &&
         filter.return_destination_airport.length
       ) {
         filtered = filtered.filter((flight) => {
           const lastSegment = flight.Returns?.[flight.Returns.length - 1];
-          const destination =
-            lastSegment?.Destination || lastSegment?.ArrivalAirport || "";
+          const dest = lastSegment?.Destination || "";
           return filter.return_destination_airport.some((airport) =>
-            destination.toLowerCase().includes(airport.toLowerCase()),
+            dest.toUpperCase().includes(airport.toUpperCase()),
           );
         });
       }
     }
 
     // ============================================================
-    // Return filtered results
+    // Return results
     // ============================================================
     res.json({
       success: true,
@@ -370,24 +367,40 @@ const filterFlights = async (req, res) => {
 // ============================================================
 
 /**
- * Parse time range string like "0 To 6 Hour" or "18 Hour +"
- * Returns [min, max] where max is null for "X Hour +"
+ * Parse a duration string like "4h 45m" into total minutes.
  */
-const parseTimeRange = (timeStr) => {
-  // Handle "X Hour +" format
-  if (timeStr.includes("+")) {
-    const min = parseInt(timeStr.replace(" Hour +", "").trim());
+function parseDurationToMinutes(durationStr) {
+  if (!durationStr) return 0;
+  const parts = durationStr.match(/(\d+)h\s*(\d+)m/);
+  if (parts) {
+    const hours = parseInt(parts[1]) || 0;
+    const minutes = parseInt(parts[2]) || 0;
+    return hours * 60 + minutes;
+  }
+  // Try "Xh Ym" format
+  const alt = durationStr.match(/(\d+)h\s*(\d+)?/);
+  if (alt) {
+    const hours = parseInt(alt[1]) || 0;
+    const minutes = parseInt(alt[2]) || 0;
+    return hours * 60 + minutes;
+  }
+  return 0;
+}
+
+/**
+ * Parse hour range string like "0 To 6 Hour" or "18 Hour +"
+ * Returns [min, max] where max is null for "X Hour +".
+ */
+function parseHourRange(rangeStr) {
+  if (rangeStr.includes("+")) {
+    const min = parseInt(rangeStr.replace(" Hour +", "").trim());
     return [min, null];
   }
-
-  // Handle "X To Y Hour" format
-  const parts = timeStr.replace(" Hour", "").split(" To ");
+  const parts = rangeStr.replace(" Hour", "").split(" To ");
   if (parts.length === 2) {
     return [parseInt(parts[0]), parseInt(parts[1])];
   }
-
-  // Default fallback
   return [0, null];
-};
+}
 
 module.exports = { filterFlights };
