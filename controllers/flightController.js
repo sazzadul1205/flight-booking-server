@@ -1,8 +1,8 @@
 // controllers/flightController.js
 const axios = require("axios");
 const MarkupCommissionRule = require("../models/MarkupCommissionRule");
+const generateFilterObject = require("../utils/generateFilterObject");
 
-// Search flights with markup & commission applied (user-specific)
 const searchFlights = async (req, res) => {
   try {
     const {
@@ -36,10 +36,8 @@ const searchFlights = async (req, res) => {
       });
     }
 
-    // Get user_id from authenticated user
     const userId = req.user.id;
 
-    // Create request data
     const requestData = {
       JourneyType: parseInt(JourneyType),
       Origin: Origin.toUpperCase().trim(),
@@ -56,12 +54,6 @@ const searchFlights = async (req, res) => {
       ChildrenAges: Array.isArray(ChildrenAges) ? ChildrenAges : [],
     };
 
-    // console.log(
-    //   "Sending to external API:",
-    //   JSON.stringify(requestData, null, 2),
-    // );
-
-    // Call external flight API
     const response = await axios.post(
       "https://uthaotrip.com/api/air/UnauthorizeSearchAir",
       requestData,
@@ -74,7 +66,6 @@ const searchFlights = async (req, res) => {
       },
     );
 
-    // Check if API call was successful
     if (!response.data || !response.data.Success) {
       if (response.data && response.data.Message) {
         return res.status(400).json({
@@ -106,12 +97,9 @@ const searchFlights = async (req, res) => {
       });
     }
 
-    // Get active markup/commission rules for this user
     const rules = await MarkupCommissionRule.getActiveRules(userId);
 
-    // Apply markup and commission
     const flights = payload.map((flight) => {
-      // Safely extract flight values
       const baseFare = flight.BasePrice || flight.BaseFare || 0;
       const totalTax = flight.TotalTax || flight.Tax || 0;
       const totalPrice = flight.TotalPrice || flight.TotalFare || 0;
@@ -119,12 +107,12 @@ const searchFlights = async (req, res) => {
 
       let rule = null;
 
-      //  User-specific airline rule
+      // 1. User-specific airline rule
       rule = rules.find(
         (r) => r.user_id === userId && r.airline_code === airlineCode,
       );
 
-      //  User-specific global rule
+      // 2. User-specific global rule
       if (!rule) {
         rule = rules.find(
           (r) => r.user_id === userId && r.airline_code === null,
@@ -139,11 +127,12 @@ const searchFlights = async (req, res) => {
           OriginalTotalFare: Math.round(totalPrice),
           NewBaseFare: Math.round(baseFare + totalTax),
           NewDiscount: 0,
-          NewTotalFare: Math.round(totalPrice),
           AppliedRule: null,
+          CalculationBreakdown: null,
         };
       }
 
+      // STEP 1: Markup Calculation (on BaseFare + TotalTax)
       const baseForMarkup = baseFare + totalTax;
       let markupAmount = 0;
 
@@ -153,12 +142,13 @@ const searchFlights = async (req, res) => {
         markupAmount = rule.markup_value;
       }
 
-      const newBaseFare = baseForMarkup + markupAmount;
+      const newBaseFare = baseFare + markupAmount;
 
+      // STEP 2: Commission Calculation (on NewBaseFare) - FIXED!
       let commission = 0;
 
       if (rule.commission_type === "percentage") {
-        commission = (baseFare * rule.commission_value) / 100;
+        commission = (newBaseFare * rule.commission_value) / 100;
       } else if (
         rule.commission_type === "fixed" ||
         rule.commission_type === "flat"
@@ -168,15 +158,12 @@ const searchFlights = async (req, res) => {
 
       const newDiscount = commission;
 
-      const newTotalFare = newBaseFare - newDiscount;
-
       return {
         ...flight,
         OriginalBaseFare: Math.round(baseFare),
         OriginalTotalFare: Math.round(totalPrice),
         NewBaseFare: Math.round(newBaseFare),
         NewDiscount: Math.round(newDiscount),
-        NewTotalFare: Math.round(newTotalFare),
         CalculationBreakdown: {
           baseFare: Math.round(baseFare),
           totalTax: Math.round(totalTax),
@@ -189,7 +176,6 @@ const searchFlights = async (req, res) => {
           commissionValue: rule.commission_value,
           commissionAmount: Math.round(commission),
           newDiscount: Math.round(newDiscount),
-          newTotalFare: Math.round(newTotalFare),
         },
         AppliedRule: {
           id: rule.id,
@@ -204,11 +190,13 @@ const searchFlights = async (req, res) => {
       };
     });
 
-    // Return success response
+    const filterObject = generateFilterObject(flights);
+
     res.json({
       success: true,
       data: flights,
       total: flights.length,
+      filter: filterObject,
       message: "Flights retrieved successfully",
     });
   } catch (error) {
