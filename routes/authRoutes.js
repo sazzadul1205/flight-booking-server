@@ -1,3 +1,4 @@
+// routes/authRoutes.js
 const express = require("express");
 
 // Controllers
@@ -9,17 +10,18 @@ const {
 
 // Middleware
 const authenticate = require("../middleware/auth");
+const catchAsync = require("../utils/catchAsync");
 
 // Create a router
 const router = express.Router();
 
 // POST register
-router.post("/register", register);
+router.post("/register", catchAsync(register));
 
 // POST login
-router.post("/login", login);
+router.post("/login", catchAsync(login));
 
-// GET profile
-router.get("/profile", authenticate, getProfile);
+// GET profile (authenticated)
+router.get("/profile", authenticate, catchAsync(getProfile));
 
 module.exports = router;

@@ -40,7 +40,7 @@ const server = app.listen(PORT, async () => {
   }
 });
 
-// SERVER ERROR HANDLER
+// Server error handler
 server.on("error", (err) => {
   console.error(" Server error:", {
     message: err.message,

@@ -11,34 +11,34 @@ const {
   getGlobalRules,
 } = require("../controllers/markupCommissionController");
 const authenticate = require("../middleware/auth");
+const catchAsync = require("../utils/catchAsync");
 
 const router = express.Router();
 
-// All routes require authentication
 router.use(authenticate);
 
-// GET /api/config/lists - Get all rules (user-specific + global)
-router.get("/lists", getAllRules);
+// GET- Get all rules (user-specific + global)
+router.get("/lists", catchAsync(getAllRules));
 
-// GET /api/config/user - Get user-specific rules only
-router.get("/user", getUserRules);
+// GET - Get user-specific rules only
+router.get("/user", catchAsync(getUserRules));
 
-// GET /api/config/global - Get global rules only
-router.get("/global", getGlobalRules);
+// GET - Get global rules only
+router.get("/global", catchAsync(getGlobalRules));
 
-// GET /api/config/:id - Get single rule by ID
-router.get("/:id", getRuleById);
+// GET - Get single rule by ID
+router.get("/:id", catchAsync(getRuleById));
 
 // POST /api/config - Create new rule (user-specific)
-router.post("/", createRule);
+router.post("/", catchAsync(createRule));
 
-// PUT /api/config/:id - Update rule
-router.put("/:id", updateRule);
+// PUT - Update rule
+router.put("/:id", catchAsync(updateRule));
 
-// DELETE /api/config/:id - Delete rule
-router.delete("/:id", deleteRule);
+// DELETE - Delete rule
+router.delete("/:id", catchAsync(deleteRule));
 
-// PATCH /api/config/:id/toggle - Toggle rule status
-router.patch("/:id/toggle", toggleRuleStatus);
+// PATCH - Toggle rule status
+router.patch("/:id/toggle", catchAsync(toggleRuleStatus));
 
 module.exports = router;
