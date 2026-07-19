@@ -2,7 +2,7 @@
 
 /**
  * Filter flights based on user criteria
- * Fully fixed to match the actual flight data structure
+ * Cleaned version - uses only actual flight data structure
  */
 
 const filterFlights = async (req, res) => {
@@ -32,33 +32,22 @@ const filterFlights = async (req, res) => {
 
     let filtered = [...flights];
 
-    // ============================================================
     // 1. PRICE FILTER
-    // ============================================================
     if (filter.min_price || filter.max_price) {
       filtered = filtered.filter((flight) => {
-        const price =
-          flight.NewTotalFare || flight.TotalPrice || flight.TotalFare || 0;
+        const price = flight.NewTotalFare || flight.TotalPrice || 0;
         if (filter.min_price && price < filter.min_price) return false;
         if (filter.max_price && price > filter.max_price) return false;
         return true;
       });
     }
 
-    // ============================================================
-    // 2. AIRLINE FILTERS – FIXED FIELD NAMES
-    // ============================================================
+    // 2. AIRLINE FILTERS
 
     // Filter by airline name
     if (filter.airlines && filter.airlines.length) {
       filtered = filtered.filter((flight) => {
-        // Try root-level names, then first onward segment
-        const name =
-          flight.PlatingCarrierName ||
-          flight.CarrierName ||
-          flight.Onwards?.[0]?.CarrierName ||
-          flight.Onwards?.[0]?.OperatingCarrierName ||
-          "";
+        const name = flight.PlatingCarrierName || "";
         return filter.airlines.some((airline) =>
           name.toLowerCase().includes(airline.toLowerCase()),
         );
@@ -68,21 +57,14 @@ const filterFlights = async (req, res) => {
     // Filter by airline code (IATA)
     if (filter.airline_code && filter.airline_code.length) {
       filtered = filtered.filter((flight) => {
-        const code =
-          flight.PlatingCarrier ||
-          flight.Carrier ||
-          flight.Onwards?.[0]?.Carrier ||
-          flight.Onwards?.[0]?.OperatingCarrier ||
-          "";
+        const code = flight.PlatingCarrier || "";
         return filter.airline_code.some(
           (filterCode) => code.toUpperCase() === filterCode.toUpperCase(),
         );
       });
     }
 
-    // ============================================================
     // 3. FARE TYPE FILTER
-    // ============================================================
     if (filter.fare_type && filter.fare_type.length) {
       filtered = filtered.filter((flight) => {
         const isRefundable = flight.IsRefundable === true;
@@ -91,13 +73,10 @@ const filterFlights = async (req, res) => {
       });
     }
 
-    // ============================================================
-    // 4. AIRCRAFT & BAGGAGE – FIXED FIELD NAMES
-    // ============================================================
+    // 4. AIRCRAFT & BAGGAGE
     if (filter.aircraft && filter.aircraft.length) {
       filtered = filtered.filter((flight) => {
-        const aircraft =
-          flight.Onwards?.[0]?.Equipment || flight.Equipment || "";
+        const aircraft = flight.Onwards?.[0]?.Equipment || "";
         return filter.aircraft.some((type) =>
           aircraft.toLowerCase().includes(type.toLowerCase()),
         );
@@ -106,17 +85,14 @@ const filterFlights = async (req, res) => {
 
     if (filter.baggage && filter.baggage.length) {
       filtered = filtered.filter((flight) => {
-        const baggage =
-          flight.Onwards?.[0]?.AirBaggageAllowance || flight.Baggage || "";
+        const baggage = flight.Onwards?.[0]?.AirBaggageAllowance || "";
         return filter.baggage.some((b) =>
           baggage.toLowerCase().includes(b.toLowerCase()),
         );
       });
     }
 
-    // ============================================================
     // 5. ONWARD FLIGHT FILTERS (Departure)
-    // ============================================================
 
     // Stops
     if (filter.onward_flight_stops && filter.onward_flight_stops.length) {
@@ -159,7 +135,8 @@ const filterFlights = async (req, res) => {
     // Flying time (duration in minutes)
     if (filter.onward_flying_time && filter.onward_flying_time.length) {
       filtered = filtered.filter((flight) => {
-        const durationStr = flight.Onwards?.[0]?.TravelDuration || "";
+        const durationStr =
+          flight.TotalTravelTimes?.[0]?.TotalTravelDuration || "";
         const minutes = parseDurationToMinutes(durationStr);
         return filter.onward_flying_time.some((range) => {
           const [min, max] = parseHourRange(range.name);
@@ -172,7 +149,7 @@ const filterFlights = async (req, res) => {
     if (filter.onward_transit_hour && filter.onward_transit_hour.length) {
       filtered = filtered.filter((flight) => {
         const segments = flight.Onwards || [];
-        if (segments.length < 2) return true; // no layover
+        if (segments.length < 2) return true;
 
         let totalLayoverMs = 0;
         for (let i = 0; i < segments.length - 1; i++) {
@@ -198,10 +175,9 @@ const filterFlights = async (req, res) => {
         const segments = flight.Onwards || [];
         if (segments.length < 2) return true;
 
-        // Get all intermediate airports (Destinations of all but last)
         const layoverAirports = segments
           .slice(0, -1)
-          .map((seg) => seg.Destination || "");
+          .map((seg) => seg.Origin || "");
         return filter.onward_layover_airport.some((airport) =>
           layoverAirports.some((dest) =>
             dest.toUpperCase().includes(airport.toUpperCase()),
@@ -217,16 +193,14 @@ const filterFlights = async (req, res) => {
     ) {
       filtered = filtered.filter((flight) => {
         const lastSegment = flight.Onwards?.[flight.Onwards.length - 1];
-        const dest = lastSegment?.Destination || flight.Destination || "";
+        const dest = lastSegment?.Destination || "";
         return filter.onward_destination_airport.some((airport) =>
           dest.toUpperCase().includes(airport.toUpperCase()),
         );
       });
     }
 
-    // ============================================================
     // 6. RETURN FLIGHT FILTERS (if applicable)
-    // ============================================================
     const hasReturn = filtered.some((f) => f.Returns && f.Returns.length > 0);
 
     if (hasReturn) {
@@ -271,7 +245,8 @@ const filterFlights = async (req, res) => {
       // Return flying time
       if (filter.return_flying_time && filter.return_flying_time.length) {
         filtered = filtered.filter((flight) => {
-          const durationStr = flight.Returns?.[0]?.TravelDuration || "";
+          const durationStr =
+            flight.TotalTravelTimes?.[1]?.TotalTravelDuration || "";
           const minutes = parseDurationToMinutes(durationStr);
           return filter.return_flying_time.some((range) => {
             const [min, max] = parseHourRange(range.name);
@@ -314,7 +289,7 @@ const filterFlights = async (req, res) => {
           if (segments.length < 2) return true;
           const layoverAirports = segments
             .slice(0, -1)
-            .map((seg) => seg.Destination || "");
+            .map((seg) => seg.Origin || "");
           return filter.return_layover_airport.some((airport) =>
             layoverAirports.some((dest) =>
               dest.toUpperCase().includes(airport.toUpperCase()),
@@ -338,9 +313,7 @@ const filterFlights = async (req, res) => {
       }
     }
 
-    // ============================================================
     // Return results
-    // ============================================================
     res.json({
       success: true,
       data: filtered,
@@ -367,7 +340,7 @@ const filterFlights = async (req, res) => {
 // ============================================================
 
 /**
- * Parse a duration string like "4h 45m" into total minutes.
+ * Parse a duration string like "9h 10m" into total minutes.
  */
 function parseDurationToMinutes(durationStr) {
   if (!durationStr) return 0;
@@ -375,13 +348,6 @@ function parseDurationToMinutes(durationStr) {
   if (parts) {
     const hours = parseInt(parts[1]) || 0;
     const minutes = parseInt(parts[2]) || 0;
-    return hours * 60 + minutes;
-  }
-  // Try "Xh Ym" format
-  const alt = durationStr.match(/(\d+)h\s*(\d+)?/);
-  if (alt) {
-    const hours = parseInt(alt[1]) || 0;
-    const minutes = parseInt(alt[2]) || 0;
     return hours * 60 + minutes;
   }
   return 0;

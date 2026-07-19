@@ -39,7 +39,7 @@ const searchFlights = async (req, res) => {
     // Get user_id from authenticated user
     const userId = req.user.id;
 
-    // ✅ FIXED: Correct field names (NoofAdult, not NoOfAdult)
+    // Create request data
     const requestData = {
       JourneyType: parseInt(JourneyType),
       Origin: Origin.toUpperCase().trim(),
@@ -47,9 +47,9 @@ const searchFlights = async (req, res) => {
       DepartureDate: DepartureDate,
       ReturnDate: ReturnDate || "",
       ClassType: ClassType || "Economy",
-      NoofAdult: parseInt(NoofAdult), // ✅ Fixed
-      NoofChildren: parseInt(NoofChildren || 0), // ✅ Fixed
-      NoofInfant: parseInt(NoofInfant || 0), // ✅ Fixed
+      NoofAdult: parseInt(NoofAdult),
+      NoofChildren: parseInt(NoofChildren || 0),
+      NoofInfant: parseInt(NoofInfant || 0),
       IsSpecialTexRedumption: IsSpecialTexRedumption,
       IsFlexSearch: IsFlexSearch,
       Flex: Flex === null || Flex === undefined ? null : Flex,
@@ -109,7 +109,7 @@ const searchFlights = async (req, res) => {
     // Get active markup/commission rules for this user
     const rules = await MarkupCommissionRule.getActiveRules(userId);
 
-    // ✅ FIXED: Apply markup and commission with correct calculation
+    // Apply markup and commission
     const flights = payload.map((flight) => {
       // Safely extract flight values
       const baseFare = flight.BasePrice || flight.BaseFare || 0;
@@ -117,35 +117,18 @@ const searchFlights = async (req, res) => {
       const totalPrice = flight.TotalPrice || flight.TotalFare || 0;
       const airlineCode = flight.PlatingCarrier || flight.Carrier || "";
 
-      // Find matching rule with priority order:
-      // 1. User-specific + airline-specific
-      // 2. User-specific + global (all airlines)
-      // 3. Global + airline-specific
-      // 4. Global + global (fallback)
       let rule = null;
 
-      // Priority 1: User-specific airline rule
+      //  User-specific airline rule
       rule = rules.find(
         (r) => r.user_id === userId && r.airline_code === airlineCode,
       );
 
-      // Priority 2: User-specific global rule
+      //  User-specific global rule
       if (!rule) {
         rule = rules.find(
           (r) => r.user_id === userId && r.airline_code === null,
         );
-      }
-
-      // Priority 3: Global airline-specific rule
-      if (!rule) {
-        rule = rules.find(
-          (r) => r.user_id === null && r.airline_code === airlineCode,
-        );
-      }
-
-      // Priority 4: Global rule (fallback)
-      if (!rule) {
-        rule = rules.find((r) => r.user_id === null && r.airline_code === null);
       }
 
       // If no rule found, return flight without modifications
