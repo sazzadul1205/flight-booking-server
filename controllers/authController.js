@@ -1,69 +1,71 @@
+// controllers/authController.js
 const { createUser, findUserByEmail, findUserById } = require("../models/User");
 
+// Dependencies
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
+// Helper: Create error objects
+const createError = (message, statusCode) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
 // Register a new user
-const register = async (req, res) => {
+const register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
 
     // Validate input
     if (!name || !email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
+      const error = createError("All fields are required", 400);
+      return next(error);
     }
 
     // Check if user exists
     const existingUser = await findUserByEmail(email);
     if (existingUser) {
-      return res.status(400).json({ message: "Email already exists" });
+      const error = createError("Email already exists", 409);
+      return next(error);
     }
 
     // Create user
     await createUser({ name, email, password });
 
+    // Send response
     res.status(201).json({
       success: true,
       message: "User registered successfully",
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 // Login a user
-const login = async (req, res) => {
+const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
     // Validate input
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and password are required",
-      });
+      const error = createError("Email and password are required", 400);
+      return next(error);
     }
 
     // Find user
     const user = await findUserByEmail(email);
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      const error = createError("Invalid credentials", 401);
+      return next(error);
     }
 
     // Check password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      const error = createError("Invalid credentials", 401);
+      return next(error);
     }
 
     // Generate JWT
@@ -74,7 +76,7 @@ const login = async (req, res) => {
         name: user.name,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" },
+      { expiresIn: "10m" },
     );
 
     res.json({
@@ -88,37 +90,30 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
-// Protected route example
-const getProfile = async (req, res) => {
+// Get user profile
+const getProfile = async (req, res, next) => {
   try {
     const user = await findUserById(req.user.id);
+
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      const error = createError("User not found", 404);
+      return next(error);
     }
+
     res.json({
       success: true,
       data: user,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
+// Export
 module.exports = {
   register,
   login,

@@ -3,11 +3,18 @@ const axios = require("axios");
 const MarkupCommissionRule = require("../models/MarkupCommissionRule");
 const generateFilterObject = require("../utils/generateFilterObject");
 
-const searchFlights = async (req, res) => {
+// Helper: Create error objects
+const createError = (message, statusCode) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const searchFlights = async (req, res, next) => {
   try {
     const {
       JourneyType,
-      Origin,
+      Origin = "DAC",
       Destination,
       DepartureDate,
       ReturnDate,
@@ -29,11 +36,11 @@ const searchFlights = async (req, res) => {
       !DepartureDate ||
       !NoofAdult
     ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Missing required fields: JourneyType, Origin, Destination, DepartureDate, NoofAdult",
-      });
+      const error = createError(
+        "Missing required fields: JourneyType, Origin, Destination, DepartureDate, NoofAdult",
+        400,
+      );
+      return next(error);
     }
 
     const userId = req.user.id;
@@ -66,28 +73,24 @@ const searchFlights = async (req, res) => {
       },
     );
 
+    // Check API response success
     if (!response.data || !response.data.Success) {
-      if (response.data && response.data.Message) {
-        return res.status(400).json({
-          success: false,
-          message: response.data.Message,
-        });
-      }
-      return res.status(400).json({
-        success: false,
-        message: "Flight search failed. Please check your search criteria.",
-        apiResponse: response.data,
-      });
+      const message =
+        response.data?.Message ||
+        "Flight search failed. Please check your search criteria.";
+      const error = createError(message, 400);
+      return next(error);
     }
 
     const payload = response.data.Payload || [];
+
+    // Validate payload is an array
     if (!Array.isArray(payload)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid response format from flight API",
-      });
+      const error = createError("Invalid response format from flight API", 400);
+      return next(error);
     }
 
+    // No flights found - this is a success case with empty data
     if (payload.length === 0) {
       return res.json({
         success: true,
@@ -97,8 +100,10 @@ const searchFlights = async (req, res) => {
       });
     }
 
+    // Get markup rules
     const rules = await MarkupCommissionRule.getActiveRules(userId);
 
+    // Process flights with markup and commission
     const flights = payload.map((flight) => {
       const baseFare = flight.BasePrice || flight.BaseFare || 0;
       const totalTax = flight.TotalTax || flight.Tax || 0;
@@ -144,7 +149,7 @@ const searchFlights = async (req, res) => {
 
       const newBaseFare = baseFare + markupAmount;
 
-      // STEP 2: Commission Calculation (on NewBaseFare) - FIXED!
+      // STEP 2: Commission Calculation (on NewBaseFare)
       let commission = 0;
 
       if (rule.commission_type === "percentage") {
@@ -201,30 +206,10 @@ const searchFlights = async (req, res) => {
     });
   } catch (error) {
     console.error("Flight search error:", error);
-
-    if (error.response) {
-      console.error("Error response data:", error.response.data);
-      return res.status(error.response.status || 500).json({
-        success: false,
-        message: error.response.data?.Message || "External API error",
-        error: error.response.data,
-      });
+    if (error) {
+      return next(error);
     }
-
-    if (error.request) {
-      return res.status(503).json({
-        success: false,
-        message:
-          "No response from flight search service. Please try again later.",
-        error: "Service unavailable",
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Server error occurred during flight search",
-      error: error.message,
-    });
+    next(error);
   }
 };
 

@@ -20,7 +20,10 @@ const authenticate = (req, res, next) => {
     // Pass control to next PART
     next();
   } catch (error) {
-    return res.status(401).json({ message: "Invalid or expired token" });
+    next({
+      statusCode: 401,
+      message: "Invalid token",
+    });
   }
 };
 

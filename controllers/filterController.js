@@ -137,7 +137,7 @@ const filterFlights = async (req, res) => {
       });
     }
 
-    // FIXED: Flying time - Convert minutes to hours for comparison
+    // Flying time - Convert minutes to hours for comparison
     if (filter.onward_flying_time && filter.onward_flying_time.length) {
       filtered = filtered.filter((flight) => {
         const durationStr =
@@ -155,7 +155,7 @@ const filterFlights = async (req, res) => {
       });
     }
 
-    // FIXED: Transit time - Convert minutes to hours for comparison
+    // Transit time - Convert minutes to hours for comparison
     if (filter.onward_transit_hour && filter.onward_transit_hour.length) {
       filtered = filtered.filter((flight) => {
         const segments = flight.Onwards || [];
@@ -257,7 +257,7 @@ const filterFlights = async (req, res) => {
         });
       }
 
-      // FIXED: Return flying time - Convert minutes to hours
+      // Return flying time - Convert minutes to hours
       if (filter.return_flying_time && filter.return_flying_time.length) {
         filtered = filtered.filter((flight) => {
           const durationStr =
@@ -273,7 +273,7 @@ const filterFlights = async (req, res) => {
         });
       }
 
-      // FIXED: Return transit time - Convert to hours
+      // Return transit time - Convert to hours
       if (filter.return_transit_hour && filter.return_transit_hour.length) {
         filtered = filtered.filter((flight) => {
           const segments = flight.Returns || [];
@@ -350,11 +350,7 @@ const filterFlights = async (req, res) => {
     });
   } catch (error) {
     console.error("Filter error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error occurred during filtering",
-      error: error.message,
-    });
+    next(error);
   }
 };
 

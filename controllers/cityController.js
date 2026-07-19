@@ -1,15 +1,14 @@
 const axios = require("axios");
 
 // Get cities by search query
-const getCities = async (req, res) => {
+const getCities = async (req, res, next) => {
   try {
     const { input } = req.query;
 
     if (!input) {
-      return res.status(400).json({
-        success: false,
-        message: "Input query parameter is required",
-      });
+      const error = new Error("Input query parameter is required");
+      error.statusCode = 400;
+      return next(error);
     }
 
     // Call external city API
@@ -22,11 +21,7 @@ const getCities = async (req, res) => {
       data: response.data,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message,
-    });
+    next(error);
   }
 };
 

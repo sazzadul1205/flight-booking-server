@@ -103,7 +103,7 @@ const generateFilterObject = (flights) => {
         addUnique(onwardStopsList, Number(onwardStops));
       }
 
-      // Onward Flying Time - FIXED: Only add if duration exists and is valid
+      // Onward Flying Time Only add if duration exists and is valid
       const onwardDuration = flight.TotalTravelTimes[0]?.TotalTravelDuration;
       if (onwardDuration && onwardDuration.trim() !== "") {
         const minutes = parseDurationToMinutes(onwardDuration);

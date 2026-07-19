@@ -44,11 +44,7 @@ const createRule = async (req, res) => {
       id: result.insertId,
     });
   } catch (error) {
-    console.error("Create rule error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -59,11 +55,7 @@ const getAllRules = async (req, res) => {
     const rules = await MarkupCommissionRule.getAllRules(userId);
     res.json({ success: true, data: rules });
   } catch (error) {
-    console.error("Get all rules error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -74,11 +66,7 @@ const getUserRules = async (req, res) => {
     const rules = await MarkupCommissionRule.getUserRules(userId);
     res.json({ success: true, data: rules });
   } catch (error) {
-    console.error("Get user rules error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -88,11 +76,7 @@ const getGlobalRules = async (req, res) => {
     const rules = await MarkupCommissionRule.getGlobalRules();
     res.json({ success: true, data: rules });
   } catch (error) {
-    console.error("Get global rules error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -111,11 +95,7 @@ const getRuleById = async (req, res) => {
 
     res.json({ success: true, data: rule });
   } catch (error) {
-    console.error("Get rule by ID error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -162,11 +142,7 @@ const updateRule = async (req, res) => {
       message: "Rule updated successfully",
     });
   } catch (error) {
-    console.error("Update rule error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -193,11 +169,7 @@ const deleteRule = async (req, res) => {
       message: "Rule deleted successfully",
     });
   } catch (error) {
-    console.error("Delete rule error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -230,11 +202,7 @@ const toggleRuleStatus = async (req, res) => {
       message: `Rule ${is_active ? "activated" : "deactivated"} successfully`,
     });
   } catch (error) {
-    console.error("Toggle rule status error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 

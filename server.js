@@ -1,59 +1,52 @@
 // server.js
-const cors = require("cors");
-const dotenv = require("dotenv");
-const express = require("express");
-
-// Test connection
+const app = require("./app");
 const { testConnection } = require("./config/db");
 
-// Routes
-const authRoutes = require("./routes/authRoutes");
-const flightRoutes = require("./routes/flightRoutes");
-const configRoutes = require("./routes/markupCommissionRoutes");
-
-// Load environment variables
-dotenv.config();
-
-const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    credentials: true,
-  }),
-);
-app.use(express.json({ limit: "50mb" }));
-
-// Health check
-app.get("/api/health", (req, res) => {
-  res.json({
-    status: "OK",
-    message: "Server is running",
+// Uncaught Exception Handler
+process.on("uncaughtException", (err) => {
+  console.error(" Uncaught Exception:", {
+    message: err.message,
+    stack: err.stack,
     timestamp: new Date().toISOString(),
   });
+  console.log(" Server shutting down due to uncaught exception...");
+  process.exit(1);
 });
 
-// Status check
-app.get("/api/status", async (req, res) => {
-  const dbConnected = await testConnection();
-  res.json({
-    server: "running",
-    database: dbConnected ? "connected" : "disconnected",
-    port: PORT,
+// Unhandled Rejection Handler
+process.on("unhandledRejection", (reason, promise) => {
+  console.error(" Unhandled Rejection:", {
+    reason: reason,
+    promise: promise,
     timestamp: new Date().toISOString(),
   });
+  console.log(" Server shutting down due to unhandled rejection...");
+  process.exit(1);
 });
 
-// Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/config", configRoutes);
-app.use("/api", flightRoutes);
-
-// Start server
-app.listen(PORT, async () => {
+// Start the server
+const server = app.listen(PORT, async () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
-  await testConnection();
+  console.log(`📍 Boilerplate: http://localhost:${PORT}/boilerplate`);
+
+  try {
+    await testConnection();
+    console.log("✅ Database connected successfully");
+  } catch (error) {
+    console.error("❌ Database connection failed:", error.message);
+  }
+});
+
+// SERVER ERROR HANDLER
+server.on("error", (err) => {
+  console.error(" Server error:", {
+    message: err.message,
+    code: err.code,
+    timestamp: new Date().toISOString(),
+  });
+
+  process.exit(1);
 });

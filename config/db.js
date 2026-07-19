@@ -18,7 +18,7 @@ const pool = mysql
 const testConnection = async () => {
   try {
     await pool.query("SELECT 1");
-    console.log("✅ MySQL connected successfully");
+    // console.log("✅ MySQL connected successfully");
     return true;
   } catch (error) {
     console.error("❌ MySQL connection failed:", error.message);
