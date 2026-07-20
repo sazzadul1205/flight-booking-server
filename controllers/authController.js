@@ -4,13 +4,7 @@ const { createUser, findUserByEmail, findUserById } = require("../models/User");
 // Dependencies
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-
-// Helper: Create error objects
-const createError = (message, statusCode) => {
-  const error = new Error(message);
-  error.statusCode = statusCode;
-  return error;
-};
+const createError = require("../utils/createError");
 
 // Register a new user
 const register = async (req, res, next) => {

@@ -64,6 +64,7 @@ const generateFilterObject = (flights) => {
     }
   };
 
+  // Loop through flights 
   flights.forEach((flight, flightIndex) => {
     console.log(`[DEBUG] Processing flight ${flightIndex + 1}`);
 
@@ -245,7 +246,7 @@ const generateFilterObject = (flights) => {
   // Generate time ranges with exactly 6-hour gaps starting from 00:00
   const generateTimeRanges = (hoursList) => {
     if (hoursList.length === 0) {
-      return []; // Return empty if no data
+      return []; 
     }
 
     // Get unique hours from the list
@@ -332,6 +333,8 @@ const generateFilterObject = (flights) => {
   if (onwardStopsList.length > 0) {
     filter.onward_flight_stops = sortArray(onwardStopsList);
   }
+
+  // Return stops - Only if data exists
   if (returnStopsList.length > 0) {
     filter.return_flight_stops = sortArray(returnStopsList);
   }
@@ -340,12 +343,18 @@ const generateFilterObject = (flights) => {
   if (onwardDepartureHoursList.length > 0) {
     filter.onward_depart_time = generateTimeRanges(onwardDepartureHoursList);
   }
+
+  // Return time ranges - Only if data exists
   if (returnDepartureHoursList.length > 0) {
     filter.return_depart_time = generateTimeRanges(returnDepartureHoursList);
   }
+
+  // Arrival time ranges - Only if data exists
   if (onwardArrivalHoursList.length > 0) {
     filter.onward_arrival_time = generateTimeRanges(onwardArrivalHoursList);
   }
+
+  // Return arrival time ranges - Only if data exists
   if (returnArrivalHoursList.length > 0) {
     filter.return_arrival_time = generateTimeRanges(returnArrivalHoursList);
   }
@@ -358,19 +367,24 @@ const generateFilterObject = (flights) => {
     );
     console.log(`[DEBUG] FINAL onward_flying_time:`, filter.onward_flying_time);
   }
+
+  // Return duration ranges - Only if data exists
   if (returnFlyingMinutesList.length > 0) {
     filter.return_flying_time = generateHourRanges(
       returnFlyingMinutesList,
       "return_flying_time",
     );
-    console.log(`[DEBUG] FINAL return_flying_time:`, filter.return_flying_time);
   }
+
+  // Transit time ranges - Only if data exists
   if (onwardTransitMinutesList.length > 0) {
     filter.onward_transit_hour = generateHourRanges(
       onwardTransitMinutesList,
       "onward_transit_hour",
     );
   }
+
+  // Return transit time ranges - Only if data exists
   if (returnTransitMinutesList.length > 0) {
     filter.return_transit_hour = generateHourRanges(
       returnTransitMinutesList,
@@ -382,38 +396,25 @@ const generateFilterObject = (flights) => {
   if (onwardLayoverAirportsList.length > 0) {
     filter.onward_layover_airport = sortArray(onwardLayoverAirportsList);
   }
+
+  // Return airport lists - Only if data exists
   if (returnLayoverAirportsList.length > 0) {
     filter.return_layover_airport = sortArray(returnLayoverAirportsList);
   }
+
+  // Destination airport lists - Only if data exists
   if (onwardDestinationAirportsList.length > 0) {
     filter.onward_destination_airport = sortArray(
       onwardDestinationAirportsList,
     );
   }
+
+  // Return destination airport lists - Only if data exists
   if (returnDestinationAirportsList.length > 0) {
     filter.return_destination_airport = sortArray(
       returnDestinationAirportsList,
     );
   }
-
-  console.log(
-    `[DEBUG] FINAL filter object:`,
-    JSON.stringify(
-      {
-        min_price: filter.min_price,
-        max_price: filter.max_price,
-        onward_flying_time: filter.onward_flying_time,
-        onward_transit_hour: filter.onward_transit_hour,
-        onward_flight_stops: filter.onward_flight_stops,
-        onward_depart_time: filter.onward_depart_time,
-        onward_arrival_time: filter.onward_arrival_time,
-        onward_layover_airport: filter.onward_layover_airport,
-        onward_destination_airport: filter.onward_destination_airport,
-      },
-      null,
-      2,
-    ),
-  );
 
   return filter;
 };
