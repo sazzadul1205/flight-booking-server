@@ -5,16 +5,18 @@ const { createUser, findUserByEmail, findUserById } = require("../models/User");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const createError = require("../utils/createError");
+const { validationResult } = require("express-validator");
 
 // Register a new user
 const register = async (req, res, next) => {
-  const { name, email, password } = req.body;
-
-  // Validate input
-  if (!name || !email || !password) {
-    const error = createError("All fields are required", 400);
+  // Check validation results
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const error = createError(errors.array()[0].msg, 400);
     return next(error);
   }
+
+  const { name, email, password } = req.body;
 
   // Check if user exists
   const existingUser = await findUserByEmail(email);
@@ -35,13 +37,14 @@ const register = async (req, res, next) => {
 
 // Login a user
 const login = async (req, res, next) => {
-  const { email, password } = req.body;
-
-  // Validate input
-  if (!email || !password) {
-    const error = createError("Email and password are required", 400);
+  // Check validation results
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const error = createError(errors.array()[0].msg, 400);
     return next(error);
   }
+
+  const { email, password } = req.body;
 
   // Find user
   const user = await findUserByEmail(email);

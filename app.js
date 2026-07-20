@@ -3,6 +3,8 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const express = require("express");
 const path = require("path");
+const helmet = require("helmet");
+const { rateLimit } = require("express-rate-limit");
 
 // Test connection
 const { testConnection } = require("./config/db");
@@ -11,10 +13,34 @@ const { testConnection } = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const flightRoutes = require("./routes/flightRoutes");
 const configRoutes = require("./routes/markupCommissionRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
 
 dotenv.config();
 
 const app = express();
+
+app.use(helmet());
+app.use(express.json({ limit: "30mb" }));
+app.use(express.static(path.join(__dirname, "uploads")));
+
+// Rate limit
+// app.use(
+//   rateLimit({
+//     windowMs: 15 * 60 * 1000,
+//     max: 100,
+//     standardHeaders: "draft-8",
+//     legacyHeaders: false,
+//     handler: (req, res, next) => {
+//       res.status(429).json({
+//         success: false,
+//         status: 429,
+//         error: "Too Many Requests",
+//         timestamp: new Date().toISOString(),
+//         message: "Too many requests, please try again later",
+//       });
+//     },
+//   }),
+// );
 
 // Logger
 app.use((req, res, next) => {
@@ -29,8 +55,6 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: "50mb" }));
-app.use(express.static("."));
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -66,6 +90,7 @@ app.get("/boilerplate", (req, res, next) => {
 });
 
 // API Routes
+app.use("/api/upload", uploadRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/config", configRoutes);
 app.use("/api", flightRoutes);
