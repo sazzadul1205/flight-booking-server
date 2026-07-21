@@ -10,7 +10,7 @@ const catchAsync = require("../utils/catchAsync");
 const router = express.Router();
 
 // ROUTES (All require authentication)
-router.use(authenticate);
+// router.use(authenticate);
 
 // Flight search
 router.post("/flights/search", catchAsync(searchFlights));

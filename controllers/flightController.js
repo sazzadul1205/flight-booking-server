@@ -4,7 +4,6 @@ const MarkupCommissionRule = require("../models/MarkupCommissionRule");
 const generateFilterObject = require("../utils/generateFilterObject");
 const createError = require("../utils/createError");
 
-
 const searchFlights = async (req, res, next) => {
   const {
     JourneyType,
@@ -31,8 +30,8 @@ const searchFlights = async (req, res, next) => {
     return next(error);
   }
 
-  // Get user ID
-  const userId = req.user.id;
+  // Get user ID - check if user exists
+  const userId = req.user?.id || null; // ← Use optional chaining
 
   // Send request to flight API
   const requestData = {
@@ -92,8 +91,11 @@ const searchFlights = async (req, res, next) => {
     });
   }
 
-  // Get markup rules
-  const rules = await MarkupCommissionRule.getActiveRules(userId);
+  // Get markup rules - only if user exists
+  let rules = [];
+  if (userId) {
+    rules = await MarkupCommissionRule.getActiveRules(userId);
+  }
 
   // Process flights with markup and commission
   const flights = payload.map((flight) => {
@@ -104,14 +106,19 @@ const searchFlights = async (req, res, next) => {
 
     let rule = null;
 
-    // 1. User-specific airline rule
-    rule = rules.find(
-      (r) => r.user_id === userId && r.airline_code === airlineCode,
-    );
+    // Only apply rules if user exists and rules are available
+    if (userId && rules.length > 0) {
+      // 1. User-specific airline rule
+      rule = rules.find(
+        (r) => r.user_id === userId && r.airline_code === airlineCode,
+      );
 
-    // 2. User-specific global rule
-    if (!rule) {
-      rule = rules.find((r) => r.user_id === userId && r.airline_code === null);
+      // 2. User-specific global rule
+      if (!rule) {
+        rule = rules.find(
+          (r) => r.user_id === userId && r.airline_code === null,
+        );
+      }
     }
 
     // If no rule found, return flight without modifications

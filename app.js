@@ -24,23 +24,23 @@ app.use(express.json({ limit: "30mb" }));
 app.use(express.static(path.join(__dirname, "uploads")));
 
 // Rate limit
-// app.use(
-//   rateLimit({
-//     windowMs: 15 * 60 * 1000,
-//     max: 100,
-//     standardHeaders: "draft-8",
-//     legacyHeaders: false,
-//     handler: (req, res, next) => {
-//       res.status(429).json({
-//         success: false,
-//         status: 429,
-//         error: "Too Many Requests",
-//         timestamp: new Date().toISOString(),
-//         message: "Too many requests, please try again later",
-//       });
-//     },
-//   }),
-// );
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    handler: (req, res, next) => {
+      res.status(429).json({
+        success: false,
+        status: 429,
+        error: "Too Many Requests",
+        timestamp: new Date().toISOString(),
+        message: "Too many requests, please try again later",
+      });
+    },
+  }),
+);
 
 // Logger
 app.use((req, res, next) => {
