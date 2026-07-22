@@ -37,23 +37,34 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // 2. AIRLINE FILTERS
-  if (filter.airlines && filter.airlines.length) {
-    filtered = filtered.filter((flight) => {
-      const name = flight.PlatingCarrierName || flight.CarrierName || "";
-      return filter.airlines.some((airline) =>
-        name.toLowerCase().includes(airline.toLowerCase()),
-      );
-    });
-  }
+  // 2. AIRLINE FILTERS - Combined OR logic
+  const hasAirlineNameFilter = filter.airlines && filter.airlines.length > 0;
+  const hasAirlineCodeFilter =
+    filter.airline_code && filter.airline_code.length > 0;
 
-  // 2.1. AIRLINE CODE FILTER
-  if (filter.airline_code && filter.airline_code.length) {
+  if (hasAirlineNameFilter || hasAirlineCodeFilter) {
     filtered = filtered.filter((flight) => {
-      const code = flight.PlatingCarrier || flight.Carrier || "";
-      return filter.airline_code.some(
-        (filterCode) => code.toUpperCase() === filterCode.toUpperCase(),
-      );
+      let matchesAirline = false;
+      let matchesCode = false;
+
+      // Check airline name
+      if (hasAirlineNameFilter) {
+        const name = flight.PlatingCarrierName || flight.CarrierName || "";
+        matchesAirline = filter.airlines.some((airline) =>
+          name.toLowerCase().includes(airline.toLowerCase()),
+        );
+      }
+
+      // Check airline code
+      if (hasAirlineCodeFilter) {
+        const code = flight.PlatingCarrier || flight.Carrier || "";
+        matchesCode = filter.airline_code.some(
+          (filterCode) => code.toUpperCase() === filterCode.toUpperCase(),
+        );
+      }
+
+      // Return true if either matches (OR logic)
+      return matchesAirline || matchesCode;
     });
   }
 
