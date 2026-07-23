@@ -2,9 +2,18 @@
 const app = require("./app");
 const { testConnection } = require("./config/db");
 const { createServer } = require("http");
+const fs = require("fs");
+const path = require("path");
 
 const PORT = process.env.PORT || 5000;
 let server = null;
+
+// Ensure cache directory exists before starting
+const CACHE_DIR = path.join(__dirname, "cache");
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  console.log("✅ Cache directory created:", CACHE_DIR);
+}
 
 // Uncaught Exceptions
 process.on("uncaughtException", (err) => {
@@ -44,8 +53,8 @@ process.on("unhandledRejection", (reason) => {
 
   if (server) {
     server.close(() => {
-      process.exit(1);
       console.log("Server closed gracefully");
+      process.exit(1);
     });
 
     // Force exit after 5 seconds
@@ -66,17 +75,20 @@ server.listen(PORT, async () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
   console.log(`📍 Boilerplate: http://localhost:${PORT}/boilerplate`);
+  console.log(`📍 Cache stats: http://localhost:${PORT}/api/cache/stats`);
+  console.log(`📍 Cache list: http://localhost:${PORT}/api/cache/list`);
+  console.log(`📍 Cache clear: http://localhost:${PORT}/api/cache/clear`);
 
   try {
     const dbConnected = await testConnection();
 
     if (dbConnected) {
-      console.log("Database connected successfully");
+      console.log("✅ Database connected successfully");
     } else {
-      console.log("Database is NOT connected - some features may not work");
+      console.log("⚠️ Database is NOT connected - some features may not work");
     }
   } catch (error) {
-    console.error("Database connection error:", error.message);
+    console.error("❌ Database connection error:", error.message);
   }
 });
 
@@ -107,3 +119,6 @@ const gracefulShutdown = (signal) => {
     process.exit(1);
   }, 10000);
 };
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

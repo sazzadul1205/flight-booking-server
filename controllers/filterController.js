@@ -1,9 +1,39 @@
-// controllers/filterController.js
+const { readCache } = require("../utils/cacheManager");
+const applyMarkupToFlights = require("../utils/applyMarkup");
+const MarkupCommissionRule = require("../models/MarkupCommissionRule");
 
 // Filter flights
 const filterFlights = async (req, res, next) => {
-  const flights = req.body.flights || [];
-  const filter = req.body.filter || {};
+  const { igxKey, filter = {} } = req.body;
+
+  // Validate igxKey
+  if (!igxKey) {
+    return res.status(400).json({
+      success: false,
+      message: "igxKey is required for filtering",
+      code: "MISSING_IGX_KEY",
+    });
+  }
+
+  // Load cached data
+  const cached = readCache(igxKey);
+  if (!cached) {
+    return res.status(410).json({
+      success: false,
+      message: "Flight data expired. Please search again.",
+      code: "CACHE_EXPIRED",
+    });
+  }
+
+  // Get user ID and rules
+  const userId = req.user?.id || null;
+  let rules = [];
+  if (userId) {
+    rules = await MarkupCommissionRule.getActiveRules(userId);
+  }
+
+  // Apply markup to cached flights
+  const flights = await applyMarkupToFlights(cached.payload, userId, rules);
 
   if (!flights.length) {
     return res.json({
@@ -27,7 +57,7 @@ const filterFlights = async (req, res, next) => {
 
   let filtered = [...flights];
 
-  // 1. PRICE FILTER - Using NewBaseFare
+  // 1. PRICE FILTER
   if (filter.min_price || filter.max_price) {
     filtered = filtered.filter((flight) => {
       const price = flight.NewBaseFare || flight.TotalPrice || 0;
@@ -47,7 +77,6 @@ const filterFlights = async (req, res, next) => {
       let matchesAirline = false;
       let matchesCode = false;
 
-      // Check airline name
       if (hasAirlineNameFilter) {
         const name = flight.PlatingCarrierName || flight.CarrierName || "";
         matchesAirline = filter.airlines.some((airline) =>
@@ -55,7 +84,6 @@ const filterFlights = async (req, res, next) => {
         );
       }
 
-      // Check airline code
       if (hasAirlineCodeFilter) {
         const code = flight.PlatingCarrier || flight.Carrier || "";
         matchesCode = filter.airline_code.some(
@@ -63,7 +91,6 @@ const filterFlights = async (req, res, next) => {
         );
       }
 
-      // Return true if either matches (OR logic)
       return matchesAirline || matchesCode;
     });
   }
@@ -77,7 +104,7 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // 4. AIRCRAFT & BAGGAGE
+  // 4. AIRCRAFT FILTER
   if (filter.aircraft && filter.aircraft.length) {
     filtered = filtered.filter((flight) => {
       const segments = flight.Onwards || [];
@@ -91,7 +118,7 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // 4.1. BAGGAGE
+  // 4.1. BAGGAGE FILTER
   if (filter.baggage && filter.baggage.length) {
     filtered = filtered.filter((flight) => {
       const segments = flight.Onwards || [];
@@ -115,7 +142,6 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // 5.1. ONWARD DEPARTURE & ARRIVAL TIME
   if (filter.onward_depart_time && filter.onward_depart_time.length) {
     filtered = filtered.filter((flight) => {
       const depTime = flight.Onwards?.[0]?.DepartureTime;
@@ -130,7 +156,6 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // 5.2. ONWARD DEPARTURE & ARRIVAL TIME
   if (filter.onward_arrival_time && filter.onward_arrival_time.length) {
     filtered = filtered.filter((flight) => {
       const segments = flight.Onwards || [];
@@ -147,7 +172,6 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // Flying time - Convert minutes to hours for comparison
   if (filter.onward_flying_time && filter.onward_flying_time.length) {
     filtered = filtered.filter((flight) => {
       const durationStr =
@@ -163,7 +187,6 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // Transit time - Convert minutes to hours for comparison
   if (filter.onward_transit_hour && filter.onward_transit_hour.length) {
     filtered = filtered.filter((flight) => {
       const segments = flight.Onwards || [];
@@ -188,7 +211,6 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // Layover airports
   if (filter.onward_layover_airport && filter.onward_layover_airport.length) {
     filtered = filtered.filter((flight) => {
       const segments = flight.Onwards || [];
@@ -204,7 +226,6 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // Destination airport
   if (
     filter.onward_destination_airport &&
     filter.onward_destination_airport.length
@@ -223,7 +244,6 @@ const filterFlights = async (req, res, next) => {
   // 6. RETURN FLIGHT FILTERS
   const hasReturn = filtered.some((f) => f.Returns && f.Returns.length > 0);
 
-  // 6.1. RETURN DEPARTURE & ARRIVAL TIME
   if (hasReturn) {
     if (filter.return_flight_stops && filter.return_flight_stops.length) {
       filtered = filtered.filter((flight) => {
@@ -264,7 +284,6 @@ const filterFlights = async (req, res, next) => {
       });
     }
 
-    // Return flying time - Convert minutes to hours
     if (filter.return_flying_time && filter.return_flying_time.length) {
       filtered = filtered.filter((flight) => {
         const durationStr =
@@ -280,7 +299,6 @@ const filterFlights = async (req, res, next) => {
       });
     }
 
-    // Return transit time - Convert to hours
     if (filter.return_transit_hour && filter.return_transit_hour.length) {
       filtered = filtered.filter((flight) => {
         const segments = flight.Returns || [];
@@ -343,6 +361,7 @@ const filterFlights = async (req, res, next) => {
     data: filtered,
     original_count: flights.length,
     filtered_count: filtered.length,
+    cached_at: cached.metadata?.cachedAt || null,
     applied_filters: Object.keys(filter).filter((key) => {
       const val = filter[key];
       return val && (Array.isArray(val) ? val.length > 0 : true);
@@ -356,7 +375,6 @@ const filterFlights = async (req, res, next) => {
 
 // HELPER FUNCTIONS
 
-// Parse duration
 function parseDurationToMinutes(durationStr) {
   if (!durationStr) return 0;
 
@@ -370,7 +388,6 @@ function parseDurationToMinutes(durationStr) {
   return 0;
 }
 
-// Parse hour range
 function parseHourRange(rangeStr) {
   if (!rangeStr) return [0, null];
 
@@ -400,7 +417,6 @@ function parseHourRange(rangeStr) {
   return [0, null];
 }
 
-// Parse time range
 function parseTimeRange(rangeStr) {
   if (!rangeStr) return [0, 23];
 

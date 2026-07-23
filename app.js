@@ -14,6 +14,10 @@ const authRoutes = require("./routes/authRoutes");
 const flightRoutes = require("./routes/flightRoutes");
 const configRoutes = require("./routes/markupCommissionRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
+const cacheRoutes = require("./routes/cacheRoutes"); // NEW
+
+// Import cache manager
+const { startCleanup } = require("./utils/cacheManager");
 
 dotenv.config();
 
@@ -80,6 +84,9 @@ app.get("/api/status", async (req, res, next) => {
   }
 });
 
+// Cache routes - ADD THIS SECTION
+app.use("/api/cache", cacheRoutes);
+
 // Boilerplate
 app.get("/boilerplate", (req, res, next) => {
   res.sendFile("boiler.html", { root: "." }, (err) => {
@@ -122,5 +129,9 @@ app.use((err, req, res, next) => {
     message: message,
   });
 });
+
+// START CACHE CLEANUP (runs every 5 minutes)
+startCleanup();
+console.log("✅ Cache cleanup service started (TTL: 10 minutes)");
 
 module.exports = app;
