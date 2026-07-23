@@ -14,10 +14,10 @@ const authRoutes = require("./routes/authRoutes");
 const flightRoutes = require("./routes/flightRoutes");
 const configRoutes = require("./routes/markupCommissionRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
-const cacheRoutes = require("./routes/cacheRoutes"); // NEW
+const cacheRoutes = require("./routes/cacheRoutes");
 
-// Import cache manager
-const { startCleanup } = require("./utils/cacheManager");
+// Import cron cleanup (starts automatically)
+require("./utils/cronCleanup");
 
 dotenv.config();
 
@@ -84,7 +84,7 @@ app.get("/api/status", async (req, res, next) => {
   }
 });
 
-// Cache routes - ADD THIS SECTION
+// Cache routes
 app.use("/api/cache", cacheRoutes);
 
 // Boilerplate
@@ -111,7 +111,6 @@ app.use((req, res, next) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  // Log the error
   console.error("❌ Error:", {
     message: err.message,
     path: req.path,
@@ -120,7 +119,6 @@ app.use((err, req, res, next) => {
     timestamp: new Date().toISOString(),
   });
 
-  // Send response
   const statusCode = err.statusCode || 500;
   const message = err.message || "Internal Server Error";
 
@@ -130,8 +128,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// START CACHE CLEANUP (runs every 5 minutes)
-startCleanup();
-console.log("✅ Cache cleanup service started (TTL: 10 minutes)");
+// Cache cleanup is now handled by cron (imported above)
+console.log("✅ Cache cleanup scheduled via cron (every 5 minutes)");
 
 module.exports = app;

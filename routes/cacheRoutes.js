@@ -7,15 +7,18 @@ const {
   clearAllCache,
   listCacheFiles,
   performCleanup,
+  getCleanupStats,
 } = require("../utils/cacheManager");
 
 // Get cache statistics
 router.get("/stats", (req, res) => {
   try {
     const stats = getCacheStats();
+    const cleanupStats = getCleanupStats();
     res.json({
       success: true,
       stats: stats,
+      cleanup: cleanupStats,
       ttl_minutes: 10,
       timestamp: new Date().toISOString(),
     });
@@ -48,7 +51,7 @@ router.get("/list", (req, res) => {
   }
 });
 
-// Clear ALL cache files - MAIN TESTING ROUTE
+// Clear ALL cache files
 router.get("/clear", (req, res) => {
   try {
     const result = clearAllCache();
@@ -98,10 +101,30 @@ router.get("/clear/:igxKey", (req, res) => {
 router.get("/cleanup", (req, res) => {
   try {
     const deleted = performCleanup();
+    const stats = getCleanupStats();
     res.json({
       success: true,
       message: `Cleanup completed: ${deleted} expired files deleted`,
       deleted: deleted,
+      totalDeleted: stats.totalDeleted,
+      totalRuns: stats.totalRuns,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+// Get cleanup statistics
+router.get("/cleanup/stats", (req, res) => {
+  try {
+    const stats = getCleanupStats();
+    res.json({
+      success: true,
+      stats: stats,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

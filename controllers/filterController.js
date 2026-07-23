@@ -2,9 +2,16 @@ const { readCache } = require("../utils/cacheManager");
 const applyMarkupToFlights = require("../utils/applyMarkup");
 const MarkupCommissionRule = require("../models/MarkupCommissionRule");
 
-// Filter flights
+// Filter flights with pagination
 const filterFlights = async (req, res, next) => {
-  const { igxKey, filter = {} } = req.body;
+  const {
+    igxKey,
+    filter = {},
+    page = 1,
+    limit = 20,
+    sortBy = "price", // price, duration, departure
+    sortOrder = "asc", // asc, desc
+  } = req.body;
 
   // Validate igxKey
   if (!igxKey) {
@@ -39,22 +46,20 @@ const filterFlights = async (req, res, next) => {
     return res.json({
       success: true,
       data: [],
+      pagination: {
+        page: 1,
+        limit: limit,
+        total: 0,
+        totalPages: 0,
+        hasMore: false,
+      },
       original_count: 0,
       filtered_count: 0,
       message: "No flights to filter",
     });
   }
 
-  if (!Object.keys(filter).length) {
-    return res.json({
-      success: true,
-      data: flights,
-      original_count: flights.length,
-      filtered_count: flights.length,
-      message: "No filter applied",
-    });
-  }
-
+  // APPLY FILTERS (same logic as before)
   let filtered = [...flights];
 
   // 1. PRICE FILTER
@@ -67,7 +72,7 @@ const filterFlights = async (req, res, next) => {
     });
   }
 
-  // 2. AIRLINE FILTERS - Combined OR logic
+  // 2. AIRLINE FILTERS
   const hasAirlineNameFilter = filter.airlines && filter.airlines.length > 0;
   const hasAirlineCodeFilter =
     filter.airline_code && filter.airline_code.length > 0;
@@ -355,10 +360,64 @@ const filterFlights = async (req, res, next) => {
     }
   }
 
-  // Return results
+  // ===== PAGINATION & SORTING =====
+
+  // Sort filtered results
+  if (sortBy) {
+    filtered.sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortBy) {
+        case "price":
+          aVal = a.NewBaseFare || a.TotalPrice || 0;
+          bVal = b.NewBaseFare || b.TotalPrice || 0;
+          break;
+        case "duration":
+          aVal = parseDurationToMinutes(
+            a.TotalTravelTimes?.[0]?.TotalTravelDuration || "0h 0m",
+          );
+          bVal = parseDurationToMinutes(
+            b.TotalTravelTimes?.[0]?.TotalTravelDuration || "0h 0m",
+          );
+          break;
+        case "departure":
+          aVal = new Date(a.Onwards?.[0]?.DepartureTime || 0).getTime();
+          bVal = new Date(b.Onwards?.[0]?.DepartureTime || 0).getTime();
+          break;
+        default:
+          aVal = 0;
+          bVal = 0;
+      }
+
+      if (sortOrder === "asc") {
+        return aVal - bVal;
+      } else {
+        return bVal - aVal;
+      }
+    });
+  }
+
+  // Calculate pagination
+  const total = filtered.length;
+  const totalPages = Math.ceil(total / limit);
+  const currentPage = Math.min(Math.max(1, parseInt(page)), totalPages || 1);
+  const startIndex = (currentPage - 1) * limit;
+  const endIndex = Math.min(startIndex + limit, total);
+  const paginatedData = filtered.slice(startIndex, endIndex);
+  const hasMore = currentPage < totalPages;
+
+  // Return results with pagination
   res.json({
     success: true,
-    data: filtered,
+    data: paginatedData,
+    pagination: {
+      page: currentPage,
+      limit: limit,
+      total: total,
+      totalPages: totalPages,
+      hasMore: hasMore,
+      nextPage: hasMore ? currentPage + 1 : null,
+    },
     original_count: flights.length,
     filtered_count: filtered.length,
     cached_at: cached.metadata?.cachedAt || null,
@@ -367,41 +426,34 @@ const filterFlights = async (req, res, next) => {
       return val && (Array.isArray(val) ? val.length > 0 : true);
     }),
     message:
-      filtered.length > 0
-        ? `${filtered.length} flights found matching your criteria`
+      paginatedData.length > 0
+        ? `${paginatedData.length} flights found matching your criteria (showing page ${currentPage} of ${totalPages})`
         : "No flights match your filter criteria",
   });
 };
 
-// HELPER FUNCTIONS
-
+// HELPER FUNCTIONS (same as before)
 function parseDurationToMinutes(durationStr) {
   if (!durationStr) return 0;
-
   const parts = durationStr.match(/(\d+)h\s*(\d+)m/);
   if (parts) {
     const hours = parseInt(parts[1]) || 0;
     const minutes = parseInt(parts[2]) || 0;
     return hours * 60 + minutes;
   }
-
   return 0;
 }
 
 function parseHourRange(rangeStr) {
   if (!rangeStr) return [0, null];
-
   if (!isNaN(rangeStr) && typeof rangeStr === "number") {
     return [rangeStr, null];
   }
-
   const str = String(rangeStr);
-
   if (str.includes("+")) {
     const min = parseInt(str.replace(" Hour +", "").trim());
     return [min || 0, null];
   }
-
   const parts = str
     .replace(/Hour|Hours/g, "")
     .trim()
@@ -413,16 +465,13 @@ function parseHourRange(rangeStr) {
       return [min, max];
     }
   }
-
   return [0, null];
 }
 
 function parseTimeRange(rangeStr) {
   if (!rangeStr) return [0, 23];
-
   const str =
     typeof rangeStr === "object" ? rangeStr.name || "" : String(rangeStr);
-
   const parts = str.split(" To ");
   if (parts.length === 2) {
     const start = parseInt(parts[0].split(":")[0]);
@@ -431,7 +480,6 @@ function parseTimeRange(rangeStr) {
       return [start, end];
     }
   }
-
   const parts2 = str.split(" - ");
   if (parts2.length === 2) {
     const start = parseInt(parts2[0].split(":")[0]);
@@ -440,7 +488,6 @@ function parseTimeRange(rangeStr) {
       return [start, end];
     }
   }
-
   return [0, 23];
 }
 

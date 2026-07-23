@@ -4,14 +4,18 @@ const path = require("path");
 const CACHE_DIR = path.join(__dirname, "..", "cache");
 const TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+// Track cleanup stats globally
+global.cacheCleanupStats = {
+  lastCleanup: null,
+  totalDeleted: 0,
+  totalRuns: 0,
+};
+
 // Ensure cache directory exists
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-/**
- * Write raw payload to cache file with atomic operation
- */
 function writeCache(igxKey, payload, metadata = {}) {
   if (!igxKey) return false;
 
@@ -32,15 +36,11 @@ function writeCache(igxKey, payload, metadata = {}) {
     return true;
   } catch (error) {
     console.error("Cache write error:", error);
-    // Clean up temp file if it exists
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     return false;
   }
 }
 
-/**
- * Read cache and return { payload, metadata } or null if expired/missing
- */
 function readCache(igxKey) {
   if (!igxKey) return null;
 
@@ -63,16 +63,12 @@ function readCache(igxKey) {
       timestamp: cached.timestamp,
     };
   } catch (error) {
-    // Corrupted file – delete it
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     console.error("Cache read error:", error);
     return null;
   }
 }
 
-/**
- * Check if cache exists and is valid (without reading full data)
- */
 function hasValidCache(igxKey) {
   if (!igxKey) return false;
 
@@ -87,9 +83,6 @@ function hasValidCache(igxKey) {
   }
 }
 
-/**
- * Delete specific cache file
- */
 function deleteCache(igxKey) {
   if (!igxKey) return false;
 
@@ -101,9 +94,6 @@ function deleteCache(igxKey) {
   return false;
 }
 
-/**
- * Clear ALL cache files
- */
 function clearAllCache() {
   if (!fs.existsSync(CACHE_DIR)) {
     return { count: 0, files: [] };
@@ -122,15 +112,16 @@ function clearAllCache() {
     }
   }
 
+  // Update global stats
+  global.cacheCleanupStats.totalDeleted += deletedFiles.length;
+  global.cacheCleanupStats.totalRuns++;
+
   return {
     count: deletedFiles.length,
     files: deletedFiles,
   };
 }
 
-/**
- * Get cache stats (size, count, oldest/newest)
- */
 function getCacheStats() {
   if (!fs.existsSync(CACHE_DIR)) {
     return {
@@ -165,9 +156,6 @@ function getCacheStats() {
   return stats;
 }
 
-/**
- * List all cache files with details
- */
 function listCacheFiles() {
   if (!fs.existsSync(CACHE_DIR)) {
     return [];
@@ -187,9 +175,6 @@ function listCacheFiles() {
   });
 }
 
-/**
- * Perform cleanup - returns number of deleted files
- */
 function performCleanup() {
   if (!fs.existsSync(CACHE_DIR)) return 0;
 
@@ -206,35 +191,22 @@ function performCleanup() {
         deleted++;
       }
     } catch (error) {
-      // File might have been deleted already
+      console.error(`Failed to delete ${file}:`, error);
     }
   }
+
+  // Update global stats
+  if (deleted > 0) {
+    global.cacheCleanupStats.lastCleanup = now;
+    global.cacheCleanupStats.totalDeleted += deleted;
+  }
+  global.cacheCleanupStats.totalRuns++;
 
   return deleted;
 }
 
-/**
- * Background cleanup – run every 5 minutes
- */
-function startCleanup() {
-  console.log("Cache cleanup started (TTL:", TTL_MS / 60000, "minutes)");
-
-  // Run immediately on first call
-  const cleaned = performCleanup();
-  if (cleaned > 0) {
-    console.log(`Initial cleanup: deleted ${cleaned} expired files`);
-  }
-
-  // Then schedule regular cleanup
-  setInterval(
-    () => {
-      const deleted = performCleanup();
-      if (deleted > 0) {
-        console.log(`Cache cleanup: deleted ${deleted} expired files`);
-      }
-    },
-    5 * 60 * 1000,
-  );
+function getCleanupStats() {
+  return global.cacheCleanupStats;
 }
 
 module.exports = {
@@ -246,5 +218,5 @@ module.exports = {
   getCacheStats,
   listCacheFiles,
   performCleanup,
-  startCleanup,
+  getCleanupStats,
 };
